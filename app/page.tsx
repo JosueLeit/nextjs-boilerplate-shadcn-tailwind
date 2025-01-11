@@ -1,9 +1,9 @@
-import { ModeToggle } from "@/components/ModeToggle";
+import PhotoWall from "@/components/PhotoWall";
+
 export default function Home() {
   return (
-    // <div className="bg-red-500">
-      <ModeToggle/>
-    // </d
-    // iv>
+  <>
+    <PhotoWall />
+  </>
   );
 }

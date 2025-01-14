@@ -22,7 +22,7 @@ export default function RelationshipCounter() {
         const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
         const seconds = Math.floor((difference % (1000 * 60)) / 1000)
 
-        setElapsedTime(`${years}a ${months}m ${days}d ${hours}h ${minutes}m ${seconds}s`)
+        setElapsedTime(`${years} anos, ${months} meses, ${days} dias, ${hours} horas, ${minutes} minutos, ${seconds} segundos`)
       }, 1000)
 
       return () => clearInterval(timer)

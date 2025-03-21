@@ -1,13 +1,19 @@
-# PhotoWall - Roadmap para MicroSaaS
+# FavoritePerson.app - Roadmap para MicroSaaS
 
 ## Fase 1: Correções e Melhorias Básicas
 
 - [x] Corrigir fluxo de upload de fotos
 - [x] Adicionar feedback de erro para o usuário
 - [x] Melhorar atualização da lista após upload
-- [ ] Adicionar confirmação de exclusão de fotos
-- [ ] Implementar visualização em tela cheia
-- [ ] Melhorar desempenho de carregamento das imagens
+- [x] Corrigir funcionalidade do botão de fechar no modal de upload
+- [x] Implementar verificação de campos obrigatórios no upload
+- [x] Otimizar solicitação de data de início do relacionamento (apenas na primeira foto)
+- [x] Renomear aplicativo para FavoritePerson
+- [x] Corrigir suporte para diferentes formatos de imagem (webp, heic, tiff, etc.)
+- [x] Remover toggle de tema e padronizar com tema claro
+- [x] Adicionar confirmação de exclusão de fotos
+- [x] Implementar visualização em tela cheia
+- [x] Melhorar desempenho de carregamento das imagens
 
 ## Fase 2: Autenticação e Multi-usuários
 
@@ -35,6 +41,7 @@
 - [ ] Configurar analytics e rastreamento de conversão
 - [ ] Criar página de landing para aquisição de clientes
 - [ ] Implementar sistema de referral/indicação
+- [ ] Registrar domínio favoriteperson.app e configurar hospedagem
 
 ## Fase 5: Expansão de Recursos
 
@@ -81,3 +88,24 @@
 - CloudFlare para CDN
 - Sanity ou Contentful para gerenciamento de conteúdo
 - Firebase Analytics ou Posthog para analytics 
+
+## Progresso Atual
+
+### Concluído (Fase 1)
+- ✅ Estrutura base do aplicativo implementada com Next.js, TypeScript e Tailwind
+- ✅ Integração com Supabase para armazenamento de imagens
+- ✅ Upload de fotos com seleção de data e legenda
+- ✅ Visualização de fotos em galeria estilo polaroid
+- ✅ Contador de tempo de relacionamento
+- ✅ Edição e exclusão de fotos existentes
+- ✅ Suporte a múltiplos formatos de imagem
+- ✅ Interface responsiva para dispositivos móveis e desktop
+- ✅ Melhorias de UX no fluxo de upload
+- ✅ Confirmação de exclusão com diálogo de alerta
+- ✅ Visualização em tela cheia das imagens
+- ✅ Carregamento lazy de imagens com indicador de progresso
+
+### Próximos Passos
+- 🔜 Sistema de autenticação e multi-usuários (Fase 2)
+- 🔜 Registrar domínio favoriteperson.app
+- 🔜 Implementação de recursos premium e monetização 

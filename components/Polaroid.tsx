@@ -1,10 +1,21 @@
 import React, { useState } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { motion } from 'framer-motion'
-import { X, Trash2, Edit, Loader2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, Trash2, Edit, Loader2, AlertCircle, Maximize, Minimize } from 'lucide-react'
 import { Button } from './ui/button'
 import { supabase } from '@/lib/supabaseClient'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog"
+import Image from "next/image"
 
 interface PolaroidProps {
   imageUrl: string
@@ -22,6 +33,9 @@ const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, 
   const [editedDate, setEditedDate] = useState(date);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   const formattedDate = () => {
     try {
@@ -30,6 +44,10 @@ const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, 
       return date;
     }
   }
+
+  const handleDeleteRequest = () => {
+    setShowDeleteConfirm(true);
+  };
 
   const handleDelete = async () => {
     if (!fileName) return;
@@ -52,6 +70,7 @@ const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, 
       console.error('Erro ao deletar a imagem:', error);
     } finally {
       setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -70,6 +89,14 @@ const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, 
     }
   };
 
+  const toggleFullscreen = () => {
+    setFullscreen(!fullscreen);
+  };
+
+  const handleImageLoad = () => {
+    setImageLoaded(true);
+  };
+
   return (
     <>
       <motion.div 
@@ -79,8 +106,19 @@ const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, 
         layoutId={`polaroid-${imageUrl}`}
         onClick={() => setExpanded(true)}
       >
-        <div className="w-full h-56 overflow-hidden rounded-sm mb-2 bg-gray-100">
-          <img src={imageUrl} alt={caption} className="w-full h-full object-cover" />
+        <div className="w-full h-56 overflow-hidden rounded-sm mb-2 bg-gray-100 relative">
+          {!imageLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200 animate-pulse">
+              <Loader2 className="h-8 w-8 text-gray-400 animate-spin" />
+            </div>
+          )}
+          <img 
+            src={imageUrl} 
+            alt={caption} 
+            className={`w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={handleImageLoad}
+            loading="lazy"
+          />
         </div>
         <div className="p-2 text-center">
           <p className="font-handwriting text-base text-gray-800">{caption}</p>
@@ -109,11 +147,19 @@ const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, 
                     <Button 
                       variant="destructive" 
                       size="sm" 
-                      onClick={handleDelete}
+                      onClick={handleDeleteRequest}
                       disabled={isDeleting || !onDelete}
                     >
                       {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={16} className="mr-1" />} 
                       {isDeleting ? 'Deletando...' : 'Deletar'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={toggleFullscreen}
+                    >
+                      {fullscreen ? <Minimize size={16} className="mr-1" /> : <Maximize size={16} className="mr-1" />}
+                      {fullscreen ? 'Minimizar' : 'Expandir'}
                     </Button>
                   </>
                 ) : (
@@ -142,47 +188,99 @@ const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, 
                 )}
               </div>
               <button 
-                onClick={() => setExpanded(false)}
+                onClick={() => {
+                  setExpanded(false);
+                  setFullscreen(false);
+                }}
                 className="p-1 rounded-full hover:bg-gray-200 transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
-            <div className="w-full max-h-[70vh] overflow-hidden rounded-md">
-              <img src={imageUrl} alt={caption} className="w-full h-full object-contain" />
-            </div>
-            <div className="p-4 text-center">
-              {!isEditing ? (
-                <>
-                  <p className="font-handwriting text-xl">{caption}</p>
-                  <p className="text-sm text-gray-600 mt-2">{formattedDate()}</p>
-                </>
-              ) : (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Legenda</label>
-                    <input 
-                      type="text" 
-                      value={editedCaption} 
-                      onChange={(e) => setEditedCaption(e.target.value)}
-                      className="w-full p-2 border rounded-md"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                    <input 
-                      type="date" 
-                      value={editedDate} 
-                      onChange={(e) => setEditedDate(e.target.value)}
-                      className="w-full p-2 border rounded-md"
-                    />
-                  </div>
+            <div className={`overflow-hidden rounded-md relative ${fullscreen ? 'fixed inset-0 z-[60] bg-black flex items-center justify-center p-4' : 'w-full max-h-[70vh]'}`}>
+              {!imageLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-200 animate-pulse">
+                  <Loader2 className="h-10 w-10 text-gray-400 animate-spin" />
                 </div>
               )}
+              <img 
+                src={imageUrl} 
+                alt={caption}
+                loading="lazy"
+                className={`${fullscreen ? 'max-h-screen max-w-full object-contain' : 'w-full h-full object-contain cursor-zoom-in'} transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                onClick={!fullscreen ? toggleFullscreen : undefined}
+                onLoad={handleImageLoad}
+              />
+              {fullscreen && (
+                <button 
+                  onClick={toggleFullscreen}
+                  className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-all"
+                >
+                  <Minimize size={24} />
+                </button>
+              )}
             </div>
+            {!fullscreen && (
+              <div className="p-4 text-center">
+                {!isEditing ? (
+                  <>
+                    <p className="font-handwriting text-xl">{caption}</p>
+                    <p className="text-sm text-gray-600 mt-2">{formattedDate()}</p>
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Legenda</label>
+                      <input 
+                        type="text" 
+                        value={editedCaption} 
+                        onChange={(e) => setEditedCaption(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                      <input 
+                        type="date" 
+                        value={editedDate} 
+                        onChange={(e) => setEditedDate(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         </div>
       )}
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Confirmação de exclusão
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta foto? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDelete}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isDeleting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Excluindo...</>
+              ) : (
+                "Sim, excluir"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

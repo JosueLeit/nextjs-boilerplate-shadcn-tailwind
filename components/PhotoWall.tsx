@@ -3,14 +3,7 @@ import Polaroid from './Polaroid'
 // import PhotoUploader from './PhotoUploader'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
-
-interface Photo {
-  id: any
-  imageUrl: string
-  caption: string
-  date: string
-  fileName: string
-}
+import { Photo } from '@/types'
 
 interface FavoritePersonProps {
   photos: Photo[];
@@ -81,12 +74,8 @@ const FavoritePerson: React.FC<FavoritePersonProps> = ({photos, startDate, onRef
         {photos.map((photo) => (
           <div key={photo.id} className="flex justify-center">
             <Polaroid 
-              imageUrl={photo.imageUrl} 
-              caption={photo.caption} 
-              date={photo.date} 
-              fileName={photo.fileName}
-              onDelete={() => handlePhotoDelete()}
-              onEdit={(newCaption, newDate) => handlePhotoEdit(photo, newCaption, newDate)}
+              photo={photo}
+              onDelete={handlePhotoDelete}
             />
           </div>
         ))}

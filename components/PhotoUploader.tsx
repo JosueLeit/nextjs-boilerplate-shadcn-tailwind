@@ -82,7 +82,13 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
 
     const file = formData.image
     const fileExt = file.name.split('.').pop();
-    const fileName = `${formData.date}-${formData.caption}.${fileExt}`
+    
+    // Garantir que a data está no formato YYYY-MM-DD
+    const date = formData.date;
+    // Remover caracteres especiais e espaços da legenda para o nome do arquivo
+    const safeCaption = formData.caption.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').toLowerCase();
+    
+    const fileName = `${date}-${safeCaption}.${fileExt}`
 
     try {
       const { error } = await supabase.storage

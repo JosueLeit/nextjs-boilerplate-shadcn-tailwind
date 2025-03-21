@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { pt } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Trash2, Edit, Loader2, AlertCircle, Maximize, Minimize } from 'lucide-react'
 import { Button } from './ui/button'
@@ -16,266 +16,164 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog"
 import Image from "next/image"
+import { Photo } from '@/types'
 
 interface PolaroidProps {
-  imageUrl: string
-  caption: string
-  date: string
-  onDelete?: () => void
-  onEdit?: (newCaption: string, newDate: string) => void
-  fileName?: string
+  photo: Photo
+  onDelete: () => void
 }
 
-const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, onEdit, fileName }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedCaption, setEditedCaption] = useState(caption);
-  const [editedDate, setEditedDate] = useState(date);
+export default function Polaroid({ photo, onDelete }: PolaroidProps) {
+  const [isHovered, setIsHovered] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
-  const formattedDate = () => {
-    try {
-      return format(new Date(date), "d 'de' MMMM, yyyy", { locale: ptBR });
-    } catch (error) {
-      return date;
+  let formattedDate;
+  try {
+    let dateObj;
+    
+    if (/^\d{4}-\d{2}-\d{2}$/.test(photo.date)) {
+      dateObj = new Date(photo.date);
+    } else {
+      const parts = photo.date.split('/');
+      if (parts.length === 3) {
+        dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      } else {
+        dateObj = new Date(photo.date);
+      }
     }
+    
+    if (isNaN(dateObj.getTime())) {
+      throw new Error('Data inválida');
+    }
+    
+    formattedDate = format(dateObj, "dd 'de' MMMM 'de' yyyy", { locale: pt });
+  } catch (error) {
+    console.error('Erro ao formatar data:', error, photo.date);
+    formattedDate = photo.date;
   }
 
-  const handleDeleteRequest = () => {
-    setShowDeleteConfirm(true);
-  };
-
   const handleDelete = async () => {
-    if (!fileName) return;
-    
     try {
       setIsDeleting(true);
       
-      // Extrair o nome do arquivo da URL
-      const fileNameFromUrl = fileName;
-      
-      const { error } = await supabase.storage
+      // Deletar arquivo do storage
+      const { error } = await supabase
+        .storage
         .from('vcinesquecivel')
-        .remove([fileNameFromUrl]);
-      
+        .remove([photo.fileName]);
+        
       if (error) throw error;
       
-      if (onDelete) onDelete();
-      setExpanded(false);
+      // Chamar callback para atualizar o estado
+      onDelete();
     } catch (error) {
-      console.error('Erro ao deletar a imagem:', error);
+      console.error('Erro ao deletar foto:', error);
     } finally {
       setIsDeleting(false);
-      setShowDeleteConfirm(false);
+      setDeleteDialogOpen(false);
     }
-  };
-
-  const handleSaveEdit = async () => {
-    if (!fileName || !onEdit) return;
-    
-    try {
-      setIsSaving(true);
-      
-      onEdit(editedCaption, editedDate);
-      setIsEditing(false);
-    } catch (error) {
-      console.error('Erro ao editar a imagem:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const toggleFullscreen = () => {
-    setFullscreen(!fullscreen);
   };
 
   const handleImageLoad = () => {
     setImageLoaded(true);
   };
 
+  const toggleFullscreen = () => {
+    setFullscreen(!fullscreen);
+  };
+
   return (
     <>
       <motion.div 
-        className="bg-white p-3 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 cursor-pointer rounded-sm"
-        whileHover={{ rotate: 0, y: -5 }}
-        initial={{ rotate: Math.random() * 6 - 3 }}
-        layoutId={`polaroid-${imageUrl}`}
-        onClick={() => setExpanded(true)}
+        className={`relative ${fullscreen ? 'fixed inset-0 z-50 bg-black/90 p-4 flex items-center justify-center' : 'bg-white p-3 shadow-lg'}`}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
-        <div className="w-full h-56 overflow-hidden rounded-sm mb-2 bg-gray-100 relative">
-          {!imageLoaded && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-200 animate-pulse">
-              <Loader2 className="h-8 w-8 text-gray-400 animate-spin" />
-            </div>
-          )}
-          <img 
-            src={imageUrl} 
-            alt={caption} 
-            className={`w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={handleImageLoad}
-            loading="lazy"
-          />
+        <div className={`${fullscreen ? 'max-w-5xl w-full h-full max-h-screen flex flex-col items-center justify-center' : 'relative overflow-hidden'}`}>
+          <div className={`${fullscreen ? 'w-full h-full flex items-center justify-center' : 'relative overflow-hidden pb-[100%]'}`}>
+            {!imageLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+              </div>
+            )}
+            <img 
+              src={photo.imageUrl} 
+              alt={photo.caption} 
+              className={`${fullscreen ? 'max-h-[90vh] max-w-full object-contain' : 'absolute inset-0 w-full h-full object-cover'} transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+              loading="lazy"
+              onLoad={handleImageLoad}
+            />
+          </div>
+          
+          <div className={`${fullscreen ? 'text-white mt-4 text-center w-full max-w-2xl' : 'p-3 bg-white'}`}>
+            <h3 className={`${fullscreen ? 'text-2xl font-bold mb-2' : 'text-lg font-medium mb-1'} truncate`}>
+              {photo.caption}
+            </h3>
+            <p className={`${fullscreen ? 'text-gray-300' : 'text-sm text-gray-500'}`}>
+              {formattedDate}
+            </p>
+          </div>
         </div>
-        <div className="p-2 text-center">
-          <p className="font-handwriting text-base text-gray-800">{caption}</p>
-          <p className="text-xs text-gray-500 mt-1 font-light">{formattedDate()}</p>
+
+        <div className={`absolute top-3 right-3 flex space-x-2 ${fullscreen ? 'opacity-100' : isHovered ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}>
+          {fullscreen ? (
+            <button
+              onClick={toggleFullscreen}
+              className="bg-white/20 backdrop-blur-sm hover:bg-white/30 p-2 rounded-full text-white transition-colors"
+              title="Fechar visualização em tela cheia"
+            >
+              <Minimize className="w-5 h-5" />
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={toggleFullscreen}
+                className="bg-black/20 backdrop-blur-sm hover:bg-black/30 p-2 rounded-full text-white transition-colors"
+                title="Ver em tela cheia"
+              >
+                <Maximize className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setDeleteDialogOpen(true)}
+                className="bg-red-500/80 hover:bg-red-500 p-2 rounded-full text-white transition-colors"
+                title="Excluir foto"
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-5 h-5" />
+                )}
+              </button>
+            </>
+          )}
         </div>
       </motion.div>
 
-      {expanded && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <motion.div 
-            layoutId={`polaroid-${imageUrl}`}
-            className="bg-white p-6 rounded-lg shadow-2xl max-w-2xl w-full"
-          >
-            <div className="flex justify-between items-center mb-2">
-              <div className="flex space-x-2">
-                {!isEditing ? (
-                  <>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setIsEditing(true)}
-                      disabled={!onEdit}
-                    >
-                      <Edit size={16} className="mr-1" /> Editar
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      size="sm" 
-                      onClick={handleDeleteRequest}
-                      disabled={isDeleting || !onDelete}
-                    >
-                      {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 size={16} className="mr-1" />} 
-                      {isDeleting ? 'Deletando...' : 'Deletar'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleFullscreen}
-                    >
-                      {fullscreen ? <Minimize size={16} className="mr-1" /> : <Maximize size={16} className="mr-1" />}
-                      {fullscreen ? 'Minimizar' : 'Expandir'}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button 
-                      variant="default" 
-                      size="sm" 
-                      onClick={handleSaveEdit}
-                      disabled={isSaving}
-                    >
-                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null} 
-                      {isSaving ? 'Salvando...' : 'Salvar'}
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => {
-                        setIsEditing(false);
-                        setEditedCaption(caption);
-                        setEditedDate(date);
-                      }}
-                    >
-                      Cancelar
-                    </Button>
-                  </>
-                )}
-              </div>
-              <button 
-                onClick={() => {
-                  setExpanded(false);
-                  setFullscreen(false);
-                }}
-                className="p-1 rounded-full hover:bg-gray-200 transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            <div className={`overflow-hidden rounded-md relative ${fullscreen ? 'fixed inset-0 z-[60] bg-black flex items-center justify-center p-4' : 'w-full max-h-[70vh]'}`}>
-              {!imageLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-200 animate-pulse">
-                  <Loader2 className="h-10 w-10 text-gray-400 animate-spin" />
-                </div>
-              )}
-              <img 
-                src={imageUrl} 
-                alt={caption}
-                loading="lazy"
-                className={`${fullscreen ? 'max-h-screen max-w-full object-contain' : 'w-full h-full object-contain cursor-zoom-in'} transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-                onClick={!fullscreen ? toggleFullscreen : undefined}
-                onLoad={handleImageLoad}
-              />
-              {fullscreen && (
-                <button 
-                  onClick={toggleFullscreen}
-                  className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-all"
-                >
-                  <Minimize size={24} />
-                </button>
-              )}
-            </div>
-            {!fullscreen && (
-              <div className="p-4 text-center">
-                {!isEditing ? (
-                  <>
-                    <p className="font-handwriting text-xl">{caption}</p>
-                    <p className="text-sm text-gray-600 mt-2">{formattedDate()}</p>
-                  </>
-                ) : (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Legenda</label>
-                      <input 
-                        type="text" 
-                        value={editedCaption} 
-                        onChange={(e) => setEditedCaption(e.target.value)}
-                        className="w-full p-2 border rounded-md"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                      <input 
-                        type="date" 
-                        value={editedDate} 
-                        onChange={(e) => setEditedDate(e.target.value)}
-                        className="w-full p-2 border rounded-md"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </motion.div>
-        </div>
-      )}
-
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500" />
-              Confirmação de exclusão
-            </AlertDialogTitle>
+            <AlertDialogTitle>Excluir esta foto?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir esta foto? Esta ação não pode ser desfeita.
+              Esta ação não pode ser desfeita. A foto será permanentemente removida.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleDelete}
-              className="bg-red-500 hover:bg-red-600"
-            >
+            <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600">
               {isDeleting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Excluindo...</>
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Excluindo...
+                </>
               ) : (
-                "Sim, excluir"
+                'Excluir'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -284,5 +182,3 @@ const Polaroid: React.FC<PolaroidProps> = ({ imageUrl, caption, date, onDelete, 
     </>
   )
 }
-
-export default Polaroid

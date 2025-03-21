@@ -1,101 +1,178 @@
 'use client'
-import { useEffect, useState } from "react";
-import FavoritePerson from "@/components/PhotoWall";
-import RelationshipTimer from "@/components/RelationshipCounter";
-import { getPhotos } from "@/lib/supabaseClient";
-import { Button } from "@/components/ui/button";
-import PhotoUploadForm from "@/components/PhotoUploader";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import React, { useState, useEffect } from 'react';
+import { getPhotos } from '@/lib/supabaseClient';
+import PhotoGrid from '@/components/PhotoGrid';
+import { Button } from '@/components/ui/button';
+import { PlusCircle, LogOut } from 'lucide-react';
+import RelationshipTimer from '@/components/RelationshipTimer';
+import PhotoUploadForm from '@/components/PhotoUploader';
+import LoadingScreen from '@/components/LoadingScreen';
+import { Photo } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/components/ui/use-toast';
 
 export default function Home() {
-  const [photos, setPhotos] = useState<any>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [showUploadForm, setShowUploadForm] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [startDate, setStartDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user, logout } = useAuth();
 
   useEffect(() => {
-    // Recuperar a data inicial do localStorage ao carregar
-    const savedStartDate = localStorage.getItem('relationship_start_date');
-    if (savedStartDate) {
-      setStartDate(savedStartDate);
+    async function fetchPhotos() {
+      setLoading(true);
+      try {
+        if (!user) return;
+        
+        const photoList = await getPhotos(user.id);
+        setPhotos(photoList);
+        
+        // Obter a data mais antiga das fotos para usar como data de início
+        if (photoList.length > 0) {
+          const dates = photoList.map(photo => new Date(photo.date).getTime());
+          const oldestDate = new Date(Math.min(...dates)).toISOString().split('T')[0];
+          setStartDate(oldestDate);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar fotos:', err);
+        setError('Não foi possível carregar as fotos. Tente novamente mais tarde.');
+      } finally {
+        setLoading(false);
+      }
     }
-    
-    fetchPhotos();
-  }, [refreshTrigger]);
 
-  const fetchPhotos = async () => {
-    try {
-      setIsLoading(true);
-      const fetchedPhotos = await getPhotos();
-      setPhotos(fetchedPhotos);
-      setIsLoading(false);
-    } catch (error: any) {
-      setError('Erro ao carregar as fotos');
-      setIsLoading(false);
-    }
-  }
+    fetchPhotos();
+  }, [user]);
 
   const handleUploadComplete = (date: string) => {
-    // Se a data estiver vazia, significa que o usuário cancelou o upload
+    // Se a data estiver vazia, o usuário cancelou o upload
     if (!date) {
       setShowUploadForm(false);
       return;
     }
     
-    // Caso contrário, continuar com o fluxo normal
-    localStorage.setItem('relationship_start_date', date);
-    setStartDate(date);
-    setShowUploadForm(false);
-    setRefreshTrigger(prev => prev + 1);
+    // Salvar a data de início se for a primeira foto
+    if (!startDate && date) {
+      setStartDate(date);
+      toast({
+        title: "Data inicial salva!",
+        description: "A contagem do seu relacionamento começou.",
+        variant: "default",
+      });
+    }
+
+    // Atualizar a lista de fotos
+    getPhotos(user?.id).then(newPhotos => {
+      setPhotos(newPhotos);
+      setShowUploadForm(false);
+      toast({
+        title: "Foto adicionada com sucesso!",
+        description: "Sua memória foi salva.",
+        variant: "default",
+      });
+    });
+  };
+
+  const handleDeletePhoto = (photoId: string) => {
+    setPhotos(photos.filter(photo => photo.id !== photoId));
+    toast({
+      title: "Foto excluída",
+      description: "A foto foi removida permanentemente.",
+      variant: "destructive",
+    });
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast({
+        title: "Logout realizado",
+        description: "Você saiu da sua conta.",
+        variant: "default",
+      });
+    } catch (err) {
+      console.error('Erro ao fazer logout:', err);
+      toast({
+        title: "Erro ao sair",
+        description: "Não foi possível desconectar sua conta.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (loading) {
+    return <LoadingScreen />;
   }
 
-  const handleRefresh = () => {
-    setRefreshTrigger(prev => prev + 1);
-  }
-
-  if (isLoading) {
-    return <div className="min-h-screen bg-neutral-100 flex items-center justify-center">Carregando...</div>
-  }
-  
   return (
-  <main className="min-h-screen bg-neutral-100">
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg px-8">
-      <div className="px-4 py-6 sm:px-0">
-        <div className="flex flex-col sm:flex-row flex-wrap items-center gap-4 mb-6">
-          <div className="w-full sm:flex-1 min-w-0">
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">A história de nós dois tem</h1>
-              {startDate && (
-                <RelationshipTimer 
-                  initialDate={startDate} 
-                  className="font-semibold text-pink-600 text-base mt-2 sm:mt-0 bg-pink-50 py-1 px-3 rounded-full shadow-sm" 
-                />
-              )}
-            </div>
+    <div className="min-h-screen bg-neutral-100">
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-pink-600">FavoritePerson.app</h1>
+          <div className="flex items-center space-x-4">
+            <Button 
+              onClick={() => setShowUploadForm(true)}
+              className="bg-pink-600 hover:bg-pink-700"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Adicionar Memória
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleLogout}
+              className="border-gray-300"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sair
+            </Button>
           </div>
-          <Button onClick={() => setShowUploadForm(true)} className="bg-pink-600 hover:bg-pink-700 shrink-0">
-            Envie uma nova foto
-          </Button>
         </div>
-        
-        {error && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4 mr-2" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {startDate && (
+          <div className="mb-8">
+            <RelationshipTimer startDate={startDate} />
+          </div>
         )}
-        
-        <FavoritePerson 
-          photos={photos} 
-          startDate={startDate}
-          onRefresh={handleRefresh}
-        />
-      </div>
+
+        {error ? (
+          <div className="bg-red-50 border border-red-200 p-4 rounded-md text-red-800">
+            {error}
+          </div>
+        ) : photos.length === 0 ? (
+          <div className="bg-white p-10 rounded-lg shadow text-center">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800">Nenhuma memória ainda</h2>
+            <p className="text-gray-600 mb-6">
+              Você ainda não tem memórias. Adicione sua primeira memória especial!
+            </p>
+            <Button 
+              onClick={() => setShowUploadForm(true)}
+              className="bg-pink-600 hover:bg-pink-700"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Adicionar Primeira Memória
+            </Button>
+          </div>
+        ) : (
+          <PhotoGrid photos={photos} onDeletePhoto={handleDeletePhoto} />
+        )}
+
+        {showUploadForm && (
+          <PhotoUploadForm 
+            onComplete={handleUploadComplete} 
+            existingStartDate={startDate} 
+          />
+        )}
+      </main>
+
+      <footer className="bg-white border-t py-6 mt-10 text-center text-sm text-gray-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <p className="mb-2">Feito com ❤️ para capturar momentos especiais</p>
+          <p className="text-xs text-gray-400">© {new Date().getFullYear()} FavoritePerson.app - Todos os direitos reservados</p>
+        </div>
+      </footer>
     </div>
-    {showUploadForm && <PhotoUploadForm onComplete={handleUploadComplete} existingStartDate={startDate} />}
-  </main>
   );
 }

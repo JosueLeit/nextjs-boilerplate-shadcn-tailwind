@@ -1,13 +1,31 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatDistanceToNow } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
-export default function RelationshipCounter() {
+interface RelationshipTimerProps {
+  initialDate?: string;
+  className?: string;
+}
+
+export default function RelationshipTimer({ initialDate, className = "" }: RelationshipTimerProps) {
   const [startDate, setStartDate] = useState<Date | null>(null)
-  const [elapsedTime, setElapsedTime] = useState<string>('')
+  const [elapsedTime, setElapsedTime] = useState<{
+    years: number;
+    months: number;
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+  } | null>(null)
+
+  useEffect(() => {
+    if (initialDate) {
+      setStartDate(new Date(initialDate));
+    }
+  }, [initialDate]);
 
   useEffect(() => {
     if (startDate) {
@@ -22,7 +40,7 @@ export default function RelationshipCounter() {
         const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
         const seconds = Math.floor((difference % (1000 * 60)) / 1000)
 
-        setElapsedTime(`${years} anos, ${months} meses, ${days} dias, ${hours} horas, ${minutes} minutos, ${seconds} segundos`)
+        setElapsedTime({ years, months, days, hours, minutes, seconds })
       }, 1000)
 
       return () => clearInterval(timer)
@@ -36,34 +54,46 @@ export default function RelationshipCounter() {
     }
   }
 
+  const formatTimeFull = () => {
+    if (!elapsedTime) return '';
+    
+    const { years, months, days, hours, minutes, seconds } = elapsedTime;
+    const parts = [];
+    
+    if (years > 0) parts.push(`${years} ${years === 1 ? 'ano' : 'anos'}`);
+    if (months > 0) parts.push(`${months} ${months === 1 ? 'mês' : 'meses'}`);
+    if (days > 0) parts.push(`${days} ${days === 1 ? 'dia' : 'dias'}`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}min`);
+    parts.push(`${seconds}s`);
+    
+    // Mostrar todas as unidades de tempo, mantendo o formato de cronômetro
+    return parts.join(', ');
+  }
+
+  if (!initialDate && !startDate) {
+    return (
+      <div className={`${className} inline-flex items-center`}>
+        <Input
+          type="date"
+          id="start-date"
+          onChange={handleStartDateChange}
+          max={new Date().toISOString().split('T')[0]}
+          className="w-40"
+          placeholder="Escolha uma data"
+        />
+      </div>
+    );
+  }
+
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle className="text-2xl font-bold text-center">Cronômetro do Amor</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col space-y-2">
-            <label htmlFor="start-date" className="text-sm font-medium text-gray-700">
-            Quando o seu relacionamento começou?
-          </label>
-          <Input
-            type="date"
-            id="start-date"
-            onChange={handleStartDateChange}
-            max={new Date().toISOString().split('T')[0]}
-            />
-        </div>
-        {startDate && (
-          <div className="text-center">
-            <p className="text-lg font-semibold mb-2">Corações batendo juntos a..</p>
-            <p className="text-3xl text-pink-500 font-bold text-primary">{elapsedTime}</p>
-          </div>
-        )}
-        {!startDate && (
-          <p className="text-center text-gray-500">Coloque a data do inicio do relacionamento para ver seu tempo juntos!</p>
-        )}
-      </CardContent>
-    </Card>
-  )
+    <div className={`${className} inline-flex items-center`}>
+      {elapsedTime && (
+        <p className="text-gray-600 font-medium">
+          <span className="font-bold">{formatTimeFull()}</span>
+        </p>
+      )}
+    </div>
+  );
 }
 

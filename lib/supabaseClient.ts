@@ -25,12 +25,13 @@ export async function getPhotos(){
   }
 
   return data
-  .filter(file => file.name.match(/\.(jpg|jpeg|png|gif)$/i))
+  .filter(file => file.name.match(/\.(jpg|jpeg|png|gif|webp|heic|tiff|bmp|svg)$/i))
   .map(file => ({
     id: file.id,
     imageUrl: `${SUPABASE_URL}/storage/v1/object/public/vcinesquecivel/${file.name}`,
     caption: file.name.split('.')[0].split('-').slice(1).join(' '),
-    date: file.name.split('-')[0]
+    date: file.name.split('-')[0],
+    fileName: file.name
   }))
   .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 }

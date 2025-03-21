@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 // import localFont from "next/font/local";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider"
+import { cn } from "@/lib/utils"
 // import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 // import { AppSidebar } from "@/components/app-sidebar"
 
@@ -20,8 +21,8 @@ import { ThemeProvider } from "@/components/theme-provider"
 const caveat = Caveat({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "Minha Tata",
-  description: "Feliz aniversário",
+  title: "FavoritePerson",
+  description: "Compartilhe momentos especiais com sua pessoa favorita",
 };
 
 export default function RootLayout({
@@ -30,22 +31,35 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="Pt-Br">
+    <html lang="pt-BR" suppressHydrationWarning>
       {/* <SidebarProvider>
       <AppSidebar />
       <SidebarTrigger /> */}
-      <body
-        className={`${caveat.className} antialiased`}
-      >
+      <body className={cn(
+        "min-h-screen bg-background font-sans antialiased",
+        caveat.className
+      )}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="light"
+          enableSystem={false}
           disableTransitionOnChange
-          >
-          
+        >
+          <div className="min-h-screen bg-neutral-100">
+            <header className="bg-white shadow-sm border-b">
+              <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                <h1 className="text-2xl font-bold text-pink-600 font-handwriting">FavoritePerson</h1>
+              </div>
+            </header>
             {children}
-          </ThemeProvider>
+            <footer className="bg-white border-t py-6 mt-10 text-center text-sm text-gray-500">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <p className="mb-2">Feito com ❤️ para capturar momentos especiais</p>
+                <p className="text-xs text-gray-400">© {new Date().getFullYear()} FavoritePerson - Todos os direitos reservados</p>
+              </div>
+            </footer>
+          </div>
+        </ThemeProvider>
       </body>
     {/* </SidebarProvider> */}
     </html>

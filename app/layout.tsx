@@ -23,6 +23,21 @@ export default function RootLayout({
           {children}
           <Toaster />
         </AuthProvider>
+        {/* Script para verificar o estado de autenticação no carregamento da página */}
+        <script 
+          dangerouslySetInnerHTML={{ 
+            __html: `
+              try {
+                console.log('[AUTH] Verificando estado de autenticação na inicialização');
+                const hasSession = document.cookie.includes('sb-access-token');
+                const pathname = window.location.pathname;
+                console.log('[AUTH] Estado inicial:', { hasSession, pathname });
+              } catch (e) {
+                console.error('[AUTH] Erro ao verificar estado inicial:', e);
+              }
+            ` 
+          }} 
+        />
       </body>
     </html>
   )

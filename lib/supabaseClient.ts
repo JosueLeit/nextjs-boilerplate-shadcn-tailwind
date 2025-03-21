@@ -27,11 +27,55 @@ export async function signUp(email: string, password: string) {
 
 export async function signIn(email: string, password: string) {
   try {
-    // Limitar o que é enviado na requisição removendo informações extras que podem expor dados sensíveis
+    console.log('[AUTH] Iniciando login com:', email);
+    
+    // Limpar qualquer sessão anterior para evitar problemas
+    await supabase.auth.signOut();
+    
+    // Fazer login com persistência da sessão
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    
+    if (data?.session) {
+      console.log('[AUTH] Sessão estabelecida:', {
+        userId: data.session.user.id,
+        expires: data.session.expires_at ? new Date(data.session.expires_at * 1000).toISOString() : 'indefinido'
+      });
+      
+      // Garantir que a sessão seja persistida no storage local
+      if (typeof window !== 'undefined' && data.session.expires_at) {
+        // Armazenar token no localStorage para que o cliente Supabase possa encontrá-lo
+        localStorage.setItem('supabase.auth.token', JSON.stringify({
+          currentSession: data.session,
+          expiresAt: data.session.expires_at
+        }));
+        
+        // Armazenar também como cookies explícitos para que o middleware possa detectá-los
+        if (data.session.access_token) {
+          const maxAge = data.session.expires_in || 3600;
+          document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          
+          if (data.session.refresh_token) {
+            document.cookie = `sb-refresh-token=${data.session.refresh_token}; path=/; max-age=${maxAge * 2}; SameSite=Lax`;
+          }
+        }
+        
+        // Forçar atualização da sessão no cliente
+        await forceSessionRefresh();
+        
+        // Recarregar a página para garantir que o middleware reconheça os novos cookies
+        console.log('[AUTH] Login bem-sucedido, recarregando página para atualizar sessão');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 500);
+      }
+    } else if (error) {
+      console.error('[AUTH] Erro no login:', error.message);
+    } else {
+      console.warn('[AUTH] Login sem erro, mas sem sessão!');
+    }
     
     // Limpar imediatamente qualquer referência à senha na memória
     password = '';
@@ -40,7 +84,40 @@ export async function signIn(email: string, password: string) {
   } catch (error) {
     // Limpar senha mesmo em caso de erro
     password = '';
+    console.error('[AUTH] Exceção no login:', error);
     throw error;
+  }
+}
+
+// Função para forçar atualização da sessão no cliente
+export async function forceSessionRefresh() {
+  if (typeof window === 'undefined') return; // Executar apenas no cliente
+  
+  try {
+    console.log('[AUTH] Forçando atualização da sessão');
+    
+    // Primeiro, tenta obter a sessão atual
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session) {
+      // Se temos uma sessão, forçar o evento SIGNED_IN manualmente
+      console.log('[AUTH] Sessão encontrada, forçando atualização');
+      
+      // Definir o cookie de sessão explicitamente
+      document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=${session.expires_in}; SameSite=Lax`;
+      document.cookie = `sb-refresh-token=${session.refresh_token}; path=/; max-age=${session.expires_in * 2}; SameSite=Lax`;
+      
+      // Notificar listeners sobre a sessão atualizada
+      window.dispatchEvent(new Event('supabase.auth.session-refreshed'));
+      
+      return true;
+    } else {
+      console.warn('[AUTH] Sem sessão para atualizar');
+      return false;
+    }
+  } catch (error) {
+    console.error('[AUTH] Erro ao forçar atualização da sessão:', error);
+    return false;
   }
 }
 

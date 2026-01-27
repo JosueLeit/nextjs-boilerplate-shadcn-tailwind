@@ -1,9 +1,8 @@
 import React, { useState } from 'react'
 import { format } from 'date-fns'
 import { pt } from 'date-fns/locale'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Trash2, Edit, Loader2, AlertCircle, Maximize, Minimize } from 'lucide-react'
-import { Button } from './ui/button'
+import { motion } from 'framer-motion'
+import { Trash2, Loader2, Maximize, Minimize } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 import {
   AlertDialog,
@@ -15,7 +14,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog"
-import Image from "next/image"
 import { Photo } from '@/types'
 
 interface PolaroidProps {

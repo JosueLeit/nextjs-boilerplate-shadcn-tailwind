@@ -65,7 +65,7 @@ function RegistrationForm() {
             placeholder="seu@email.com"
             required
             className="mt-1"
-            autoComplete="off"
+            autoComplete="email"
           />
         </div>
 

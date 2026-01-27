@@ -6,15 +6,18 @@ import { Loader2, X, AlertCircle } from 'lucide-react';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Alert, AlertDescription } from './ui/alert';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface FormData {
   image: File | null
+  imagePreview: string | null
   caption: string
   date: string
 }
 
 const initialFormData: FormData = {
   image: null,
+  imagePreview: null,
   caption: '',
   date: ''
 }
@@ -32,15 +35,21 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [isFirstPhoto, setIsFirstPhoto] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     // Verificar se já existem fotos no storage
     const checkPhotosExistence = async () => {
       try {
+        if (!user?.id) {
+          console.error('[UPLOAD] Usuário não autenticado');
+          return;
+        }
+
         const { data, error } = await supabase
           .storage
           .from('vcinesquecivel')
-          .list('');
+          .list(user.id);
           
         if (error) throw error;
         
@@ -53,18 +62,24 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
           setStartDate(existingStartDate);
         }
       } catch (err) {
-        console.error("Erro ao verificar fotos existentes:", err);
+        console.error("[UPLOAD] Erro ao verificar fotos existentes:", err);
         // Por precaução, considerar que não é a primeira foto
         setIsFirstPhoto(false);
       }
     };
     
     checkPhotosExistence();
-  }, [existingStartDate]);
+  }, [existingStartDate, user]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if(e.target.files && e.target.files[0]) {
-      setFormData({...formData, image: e.target.files[0]});
+      const file = e.target.files[0];
+      // Revoke previous preview URL to avoid memory leaks
+      if (formData.imagePreview) {
+        URL.revokeObjectURL(formData.imagePreview);
+      }
+      const previewUrl = URL.createObjectURL(file);
+      setFormData({...formData, image: file, imagePreview: previewUrl});
       setImageError(null);
     }
   };
@@ -75,27 +90,24 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
   }
 
   const handleUpload = async () => {
-    if(!formData.image || !formData.caption || !formData.date) return;
+    if(!formData.image || !formData.caption || !formData.date || !user?.id) {
+      setError('Todos os campos são obrigatórios');
+      return;
+    }
 
     setIsUploading(true);
     setError(null);
 
-    const file = formData.image
-    const fileExt = file.name.split('.').pop();
-    
-    // Garantir que a data está no formato YYYY-MM-DD
-    const date = formData.date;
-    // Remover caracteres especiais e espaços da legenda para o nome do arquivo
-    const safeCaption = formData.caption.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').toLowerCase();
-    
-    const fileName = `${date}-${safeCaption}.${fileExt}`
-
     try {
-      const { error } = await supabase.storage
-      .from('vcinesquecivel')
-      .upload(fileName, file)
+      console.log('[UPLOAD] Iniciando upload:', {
+        caption: formData.caption,
+        date: formData.date,
+        userId: user.id
+      });
 
-      if (error) throw error
+      await supabase.storage
+        .from('vcinesquecivel')
+        .upload(`${user.id}/${formData.date}-${formData.caption}.${formData.image.name.split('.').pop()}`, formData.image);
       
       // Se é a primeira foto e não tem data de início, vá para o passo de confirmar
       // Caso contrário, finalize o upload
@@ -106,15 +118,15 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
         onComplete(existingStartDate || '');
       }
     } catch (error: any) {
-      console.error('Error uploading file:', error)
-      setError(error.message || 'Erro ao fazer upload da imagem. Tente novamente.')
+      console.error('[UPLOAD] Erro no upload:', error);
+      setError(error.message || 'Erro ao fazer upload da imagem. Tente novamente.');
     } finally {
       setIsUploading(false);
     }
   }
 
   const handleSubmit = () => {
-    onComplete(startDate)
+    onComplete(startDate);
   }
 
   const handleClose = () => {
@@ -166,29 +178,47 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
                   <AlertDescription>{imageError}</AlertDescription>
                 </Alert>
               )}
-              <div className={`p-6 border-2 border-dashed ${imageError ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-gray-50'} rounded-lg text-center`}>
-                <Label htmlFor="image" className="block mb-2 font-medium cursor-pointer">
-                  <div className="flex flex-col items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-12 w-12 ${imageError ? 'text-red-400' : 'text-gray-400'} mb-3`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span className={`text-sm ${imageError ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
-                      {imageError ? 'Selecione uma imagem para continuar' : 'Clique para selecionar uma foto'}
-                    </span>
-                    <span className="text-xs text-gray-500 mt-1">Arraste e solte ou clique para navegar</span>
-                  </div>
-                </Label>
-                <Input id="image" type="file" onChange={handleFileChange} accept="image/*" className="hidden"/>
-              </div>
-              
+
+              {formData.imagePreview ? (
+                <div className="relative">
+                  <img
+                    src={formData.imagePreview}
+                    alt="Preview"
+                    className="w-full h-64 object-cover rounded-lg"
+                  />
+                  <Label
+                    htmlFor="image"
+                    className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg cursor-pointer hover:bg-white transition-colors text-sm font-medium text-pink-600"
+                  >
+                    Trocar foto
+                  </Label>
+                  <Input id="image" type="file" onChange={handleFileChange} accept="image/*" className="hidden"/>
+                </div>
+              ) : (
+                <div className={`p-6 border-2 border-dashed ${imageError ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-gray-50'} rounded-lg text-center`}>
+                  <Label htmlFor="image" className="block mb-2 font-medium cursor-pointer">
+                    <div className="flex flex-col items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className={`h-12 w-12 ${imageError ? 'text-red-400' : 'text-gray-400'} mb-3`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className={`text-sm ${imageError ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                        {imageError ? 'Selecione uma imagem para continuar' : 'Clique para selecionar uma foto'}
+                      </span>
+                      <span className="text-xs text-gray-500 mt-1">Arraste e solte ou clique para navegar</span>
+                    </div>
+                  </Label>
+                  <Input id="image" type="file" onChange={handleFileChange} accept="image/*" className="hidden"/>
+                </div>
+              )}
+
               {formData.image && (
-                <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600 mb-1">Arquivo selecionado:</p>
                   <p className="text-sm font-medium truncate">{formData.image.name}</p>
                 </div>
               )}
-              
-              <Button 
+
+              <Button
                 onClick={handleNextStep}
                 className="w-full"
               >

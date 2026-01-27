@@ -16,7 +16,8 @@ export default function RelationshipTimer({ startDate }: RelationshipTimerProps)
 
   useEffect(() => {
     const calculateTimeElapsed = () => {
-      const start = new Date(startDate);
+      // Ajustar a data para meia-noite no fuso horário local
+      const start = new Date(startDate + 'T00:00:00');
       const now = new Date();
       
       // Calcular anos e meses
@@ -28,7 +29,7 @@ export default function RelationshipTimer({ startDate }: RelationshipTimerProps)
         months += 12;
       }
       
-      // Calcular dias
+      // Calcular dias considerando o fuso horário
       const tempDate = new Date(start);
       tempDate.setFullYear(now.getFullYear());
       tempDate.setMonth(now.getMonth());
@@ -85,7 +86,7 @@ export default function RelationshipTimer({ startDate }: RelationshipTimerProps)
         <TimeUnit value={timeElapsed.seconds} label="segundos" />
       </div>
       <p className="text-center text-sm text-gray-500 mt-4">
-        Desde {new Date(startDate).toLocaleDateString('pt-BR')}
+        Desde {new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')}
       </p>
     </div>
   );

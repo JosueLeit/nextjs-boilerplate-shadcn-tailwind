@@ -1,20 +1,21 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
-import { supabase, signIn, signUp, signOut, getCurrentUser } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/ui/use-toast';
 
-type AuthContextType = {
+interface AuthContextType {
   user: User | null;
   loading: boolean;
+  isAuthenticated: boolean;
   error: string | null;
+  setError: (error: string | null) => void;
+  clearError: () => void;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  setError: (error: string | null) => void;
-};
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -22,109 +23,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const initializedRef = useRef(false);
 
-  // Função para debug
-  const debugAuth = (msg: string, data?: any) => {
-    console.log(`[AUTH] ${msg}`, data || '');
-  };
-
-  // Verificar se usuário está autenticado e redirecionar adequadamente
-  useEffect(() => {
-    if (user && (window.location.pathname === '/login' || window.location.pathname === '/register')) {
-      debugAuth('Usuário autenticado detectado na página de login/registro, redirecionando');
-      router.replace('/');
-    }
-  }, [user, router]);
+  const clearError = () => setError(null);
 
   useEffect(() => {
-    // Verificar se há um usuário logado ao iniciar a aplicação
-    const checkUser = async () => {
-      try {
-        debugAuth('Verificando usuário atual');
-        const currentUser = await getCurrentUser();
-        debugAuth('Usuário atual:', currentUser);
-        
-        if (currentUser) {
-          setUser(currentUser);
-        } else {
-          setUser(null);
-        }
-      } catch (err) {
-        console.error('Erro ao verificar usuário atual:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // Prevent double initialization in Strict Mode
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
-    // Configurar listener para mudanças de autenticação
-    const { data: authListener } = supabase.auth.onAuthStateChange(
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        debugAuth(`Evento de autenticação: ${event}`, session?.user);
-        
-        if (event === 'SIGNED_IN') {
-          debugAuth('Usuário logado, atualizando estado');
-          setUser(session?.user || null);
-          
-          toast({
-            title: 'Login realizado com sucesso',
-            description: 'Bem-vindo de volta!',
-          });
-        } else if (event === 'SIGNED_OUT') {
-          debugAuth('Usuário deslogado');
-          setUser(null);
-        }
-        
+        setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
-    checkUser();
-
-    // Limpar listener ao desmontar
     return () => {
-      authListener.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, [router]);
+  }, []);
 
   const login = async (email: string, password: string) => {
     try {
       setLoading(true);
-      setError(null);
-      debugAuth('Tentando login', { email });
-      
-      const { data, error } = await signIn(email, password);
-      
-      if (error) {
-        debugAuth('Erro no login', error);
-        throw new Error(error.message);
-      }
-      
-      if (data?.user) {
-        debugAuth('Login bem-sucedido', data.user);
+      clearError();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      // Update local state
+      if (data.user) {
         setUser(data.user);
-        
-        toast({
-          title: 'Login realizado com sucesso',
-          description: 'Bem-vindo de volta!'
-        });
-        
-        // Navegação correta no Next.js
-        // 1. Primeiro atualizar o estado da aplicação
-        router.refresh();
-        
-        // 2. Depois redirecionar para home
-        setTimeout(() => {
-          debugAuth('Navegando para home após login');
-          router.replace('/');
-        }, 800);
-      } else {
-        debugAuth('Login sem usuário retornado');
-        throw new Error('Usuário não encontrado');
       }
+
+      toast({
+        title: 'Login realizado com sucesso',
+        description: 'Bem-vindo de volta!'
+      });
+
+      // Use window.location for full page reload to ensure middleware runs
+      window.location.href = '/';
     } catch (err: any) {
-      setError(err.message || 'Erro ao fazer login');
-      console.error('Erro de login:', err);
+      console.error('[AUTH] Erro no login:', err);
+      setError(err.message);
+      toast({
+        title: 'Erro no login',
+        description: err.message,
+        variant: 'destructive'
+      });
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -133,31 +91,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (email: string, password: string) => {
     try {
       setLoading(true);
-      setError(null);
-      debugAuth('Tentando registro', { email });
-      
-      const { data, error } = await signUp(email, password);
-      
-      if (error) {
-        debugAuth('Erro no registro', error);
-        throw new Error(error.message);
-      }
-      
-      if (data) {
-        debugAuth('Registro bem-sucedido', data);
-        // No Supabase, o usuário precisa confirmar o email antes de estar completamente registrado
-        toast({
-          title: 'Conta criada com sucesso',
-          description: 'Verifique seu email para confirmar o registro',
-        });
-        
-        // Atualizar o estado e navegar para login
-        router.refresh();
-        router.replace('/login');
-      }
+      clearError();
+      const { error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      toast({
+        title: 'Registro realizado com sucesso',
+        description: 'Verifique seu email para confirmar o cadastro.'
+      });
+
+      // Redirect to login page
+      window.location.href = '/login';
     } catch (err: any) {
-      setError(err.message || 'Erro ao registrar usuário');
-      console.error('Erro de registro:', err);
+      console.error('[AUTH] Erro no registro:', err);
+      setError(err.message);
+      toast({
+        title: 'Erro no registro',
+        description: err.message,
+        variant: 'destructive'
+      });
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -166,30 +123,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       setLoading(true);
-      setError(null);
-      debugAuth('Tentando logout');
-      
-      const { error } = await signOut();
-      
-      if (error) {
-        debugAuth('Erro no logout', error);
-        throw new Error(error.message);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      // Clear manually set cookies from signIn function
+      if (typeof window !== 'undefined') {
+        document.cookie = 'sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        document.cookie = 'sb-refresh-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        localStorage.removeItem('supabase.auth.token');
       }
-      
-      debugAuth('Logout bem-sucedido');
+
       setUser(null);
-      
+
       toast({
         title: 'Logout realizado',
-        description: 'Você saiu da sua conta.',
+        description: 'Você saiu da sua conta.'
       });
-      
-      // Atualizar o estado e navegar para login
-      router.refresh();
-      router.replace('/login');
-    } catch (err: any) {
-      setError(err.message || 'Erro ao fazer logout');
-      console.error('Erro de logout:', err);
+
+      // Use window.location for full page reload to clear all state
+      window.location.href = '/login';
+    } catch (error: any) {
+      console.error('[AUTH] Erro no logout:', error);
+      toast({
+        title: 'Erro ao sair',
+        description: error.message,
+        variant: 'destructive'
+      });
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -198,14 +158,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = {
     user,
     loading,
+    isAuthenticated: !!user,
     error,
+    setError,
+    clearError,
     login,
     register,
     logout,
-    setError,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

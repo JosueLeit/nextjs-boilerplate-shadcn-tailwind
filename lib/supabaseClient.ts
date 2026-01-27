@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js'; 
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
@@ -21,102 +21,35 @@ export async function signUp(email: string, password: string) {
     email,
     password,
   });
-  
+
   return { data, error };
 }
 
 export async function signIn(email: string, password: string) {
-  try {
-    console.log('[AUTH] Iniciando login com:', email);
-    
-    // Limpar qualquer sessão anterior para evitar problemas
-    await supabase.auth.signOut();
-    
-    // Fazer login com persistência da sessão
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    if (data?.session) {
-      console.log('[AUTH] Sessão estabelecida:', {
-        userId: data.session.user.id,
-        expires: data.session.expires_at ? new Date(data.session.expires_at * 1000).toISOString() : 'indefinido'
-      });
-      
-      // Garantir que a sessão seja persistida no storage local
-      if (typeof window !== 'undefined' && data.session.expires_at) {
-        // Armazenar token no localStorage para que o cliente Supabase possa encontrá-lo
-        localStorage.setItem('supabase.auth.token', JSON.stringify({
-          currentSession: data.session,
-          expiresAt: data.session.expires_at
-        }));
-        
-        // Armazenar também como cookies explícitos para que o middleware possa detectá-los
-        if (data.session.access_token) {
-          const maxAge = data.session.expires_in || 3600;
-          document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=${maxAge}; SameSite=Lax`;
-          
-          if (data.session.refresh_token) {
-            document.cookie = `sb-refresh-token=${data.session.refresh_token}; path=/; max-age=${maxAge * 2}; SameSite=Lax`;
-          }
-        }
-        
-        // Forçar atualização da sessão no cliente
-        await forceSessionRefresh();
-        
-        // Recarregar a página para garantir que o middleware reconheça os novos cookies
-        console.log('[AUTH] Login bem-sucedido, recarregando página para atualizar sessão');
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 500);
-      }
-    } else if (error) {
-      console.error('[AUTH] Erro no login:', error.message);
-    } else {
-      console.warn('[AUTH] Login sem erro, mas sem sessão!');
-    }
-    
-    // Limpar imediatamente qualquer referência à senha na memória
-    password = '';
-    
-    return { data, error };
-  } catch (error) {
-    // Limpar senha mesmo em caso de erro
-    password = '';
-    console.error('[AUTH] Exceção no login:', error);
+  // Note: This function is deprecated. Use AuthContext.login() instead.
+  // Keeping for backwards compatibility only.
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    console.error('[AUTH] Erro no login:', error.message);
     throw error;
   }
+
+  return { data, error };
 }
 
 // Função para forçar atualização da sessão no cliente
 export async function forceSessionRefresh() {
-  if (typeof window === 'undefined') return; // Executar apenas no cliente
-  
+  if (typeof window === 'undefined') return false;
+
   try {
-    console.log('[AUTH] Forçando atualização da sessão');
-    
-    // Primeiro, tenta obter a sessão atual
     const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session) {
-      // Se temos uma sessão, forçar o evento SIGNED_IN manualmente
-      console.log('[AUTH] Sessão encontrada, forçando atualização');
-      
-      // Definir o cookie de sessão explicitamente
-      document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=${session.expires_in}; SameSite=Lax`;
-      document.cookie = `sb-refresh-token=${session.refresh_token}; path=/; max-age=${session.expires_in * 2}; SameSite=Lax`;
-      
-      // Notificar listeners sobre a sessão atualizada
-      window.dispatchEvent(new Event('supabase.auth.session-refreshed'));
-      
-      return true;
-    } else {
-      console.warn('[AUTH] Sem sessão para atualizar');
-      return false;
-    }
+    return !!session;
   } catch (error) {
-    console.error('[AUTH] Erro ao forçar atualização da sessão:', error);
+    console.error('[AUTH] Erro ao verificar sessão:', error);
     return false;
   }
 }
@@ -132,72 +65,97 @@ export async function getCurrentUser() {
 }
 
 export async function resetPassword(email: string) {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email);
+  // Get the current origin for the redirect URL
+  const redirectTo = typeof window !== 'undefined'
+    ? `${window.location.origin}/update-password`
+    : undefined;
+
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo,
+  });
   return { data, error };
 }
 
 // Função para obter fotos do usuário atual ou todas as fotos se userId não for fornecido
 export async function getPhotos(userId?: string){
+  if (!userId) {
+    throw new Error('userId é obrigatório para listar fotos');
+  }
+
+  console.log('[PHOTOS] Buscando fotos para userId:', userId);
+
   const { data, error } = await supabase
     .storage
     .from('vcinesquecivel')
-    .list('', {
+    .list(userId, {  // Listar apenas no diretório do usuário
       limit: 100,
       offset: 0,
       sortBy: { column: 'name', order: 'asc'}
     });
 
   if(error){
-    console.error('Error fetching photos', error);
+    console.error('[PHOTOS] Erro ao buscar fotos:', error);
+    throw error;
+  }
+
+  if (!data) {
+    console.log('[PHOTOS] Nenhuma foto encontrada para o usuário');
     return [];
   }
 
-  // Filtrar por userId se fornecido
-  let filteredData = data;
-  if (userId) {
-    filteredData = data.filter(file => file.name.startsWith(`${userId}/`));
-  }
+  console.log('[PHOTOS] Fotos encontradas:', data.length);
+  console.log('[PHOTOS] Lista de arquivos:', data.map(f => f.name));
 
-  return filteredData
-  // Incluir outros formatos de imagem populares como webp, heic, tiff, bmp
-  .filter(file => file.name.match(/\.(jpg|jpeg|png|gif|webp|heic|tiff|bmp|svg)$/i))
-  .map(file => {
-    // Extrair informações do nome do arquivo
-    const fileNameWithoutExt = file.name.split('.')[0];
-    const parts = fileNameWithoutExt.split('-');
-    
-    // A data é a primeira parte ou após a parte do userId/
-    let dateStr = parts[0];
-    let captionParts = parts.slice(1);
-    
-    // Se tem userId, ajustar
-    if (userId && file.name.includes('/')) {
-      // O nome do arquivo seria userId/data-caption
-      const nameParts = fileNameWithoutExt.split('/');
-      if (nameParts.length > 1) {
-        const fileNameAfterUserId = nameParts[1];
-        const fileParts = fileNameAfterUserId.split('-');
-        dateStr = fileParts[0];
-        captionParts = fileParts.slice(1);
+  return data
+    // Incluir outros formatos de imagem populares como webp, heic, tiff, bmp
+    .filter(file => file.name.match(/\.(jpg|jpeg|png|gif|webp|heic|tiff|bmp|svg)$/i))
+    .map(file => {
+      // O nome do arquivo agora está dentro do diretório do usuário
+      const fileNameWithoutExt = file.name.split('.')[0];
+
+      // Extrair data e legenda do nome do arquivo
+      // Formato esperado: YYYY-MM-DD-legenda
+      const match = fileNameWithoutExt.match(/^(\d{4})-(\d{2})-(\d{2})-(.+)$/);
+
+      if (!match) {
+        console.error('[PHOTOS] Formato de nome de arquivo inválido:', file.name);
+        return null;
       }
-    }
-    
-    return {
-      id: file.id,
-      imageUrl: `${SUPABASE_URL}/storage/v1/object/public/vcinesquecivel/${file.name}`,
-      caption: captionParts.join(' '),
-      date: dateStr,
-      fileName: file.name,
-      userId: userId || null
-    };
-  })
-  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+      const [_, year, month, day, rawCaption] = match;
+      const dateStr = `${year}-${month}-${day}`;
+      const caption = rawCaption.replace(/-/g, ' ');
+
+      const fullPath = `${userId}/${file.name}`;
+      console.log('[PHOTOS] Processando arquivo:', {
+        fullPath,
+        dateStr,
+        caption
+      });
+
+      return {
+        id: file.id,
+        imageUrl: `${SUPABASE_URL}/storage/v1/object/public/vcinesquecivel/${fullPath}`,
+        caption: caption,
+        date: dateStr,
+        fileName: fullPath,
+        userId
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Ordem decrescente por data
 }
 
 // Função atualizada para incluir o userId no nome do arquivo
 export async function uploadPhoto(file: File, caption: string, date: string, userId?: string) {
+  if (!userId) {
+    throw new Error('userId é obrigatório para upload de fotos');
+  }
+
+  console.log('[PHOTOS] Iniciando upload para userId:', userId);
+
   const fileExt = file.name.split('.').pop();
-  
+
   // Garantir que a data está no formato YYYY-MM-DD
   let formattedDate = date;
   if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -205,25 +163,211 @@ export async function uploadPhoto(file: File, caption: string, date: string, use
       const dateObj = new Date(date);
       formattedDate = dateObj.toISOString().split('T')[0];
     } catch (e) {
-      console.error('Erro ao formatar data:', e);
+      console.error('[PHOTOS] Erro ao formatar data:', e);
+      throw new Error('Data inválida');
     }
   }
-  
+
   // Remover caracteres especiais e espaços da legenda para o nome do arquivo
-  const safeCaption = caption.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').toLowerCase();
-  
-  // Se o userId for fornecido, incluir no path
-  const fileName = userId 
-    ? `${userId}/${formattedDate}-${safeCaption}.${fileExt}` 
-    : `${formattedDate}-${safeCaption}.${fileExt}`;
+  const safeCaption = caption
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+    .replace(/[^\w\s-]/g, '') // Remove caracteres especiais
+    .replace(/\s+/g, '-'); // Substitui espaços por hífens
+
+  // O arquivo será salvo com apenas o nome do arquivo no diretório do usuário
+  const fileName = `${formattedDate}-${safeCaption}.${fileExt}`;
+  const fullPath = `${userId}/${fileName}`;
+
+  console.log('[PHOTOS] Tentando upload do arquivo:', {
+    fileName,
+    fullPath,
+    date: formattedDate,
+    caption: safeCaption,
+    bucket: 'vcinesquecivel'
+  });
 
   const { error } = await supabase.storage
     .from('vcinesquecivel')
-    .upload(fileName, file);
+    .upload(fullPath, file);
 
   if (error) {
+    console.error('[PHOTOS] Erro no upload:', error);
     throw error;
   }
 
-  return fileName;
+  console.log('[PHOTOS] Upload concluído com sucesso:', fullPath);
+  return fullPath;
+}
+
+// ============================================
+// PROFILE FUNCTIONS
+// ============================================
+
+export interface Profile {
+  id: string;
+  email: string | null;
+  relationship_start_date: string | null;
+  onboarding_completed: boolean;
+  share_token: string | null;
+  share_token_created_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getProfile(userId: string): Promise<Profile | null> {
+  console.log('[PROFILE] Buscando perfil para userId:', userId);
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // No rows found - profile doesn't exist yet
+      console.log('[PROFILE] Perfil não encontrado para o usuário');
+      return null;
+    }
+    console.error('[PROFILE] Erro ao buscar perfil:', error);
+    throw error;
+  }
+
+  console.log('[PROFILE] Perfil encontrado:', data);
+  return data;
+}
+
+export async function updateProfile(
+  userId: string,
+  updates: Partial<Pick<Profile, 'relationship_start_date' | 'email' | 'onboarding_completed'>>
+): Promise<Profile> {
+  console.log('[PROFILE] Atualizando perfil:', { userId, updates });
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({
+      id: userId,
+      ...updates,
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[PROFILE] Erro ao atualizar perfil:', error);
+    throw error;
+  }
+
+  console.log('[PROFILE] Perfil atualizado:', data);
+  return data;
+}
+
+export async function completeOnboarding(
+  userId: string,
+  relationshipStartDate: string
+): Promise<Profile> {
+  console.log('[PROFILE] Completando onboarding para userId:', userId);
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      relationship_start_date: relationshipStartDate,
+      onboarding_completed: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[PROFILE] Erro ao completar onboarding:', error);
+    throw error;
+  }
+
+  console.log('[PROFILE] Onboarding completado:', data);
+  return data;
+}
+
+export async function getProfileByShareToken(shareToken: string): Promise<Profile | null> {
+  console.log('[PROFILE] Buscando perfil por share_token');
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('share_token', shareToken)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      console.log('[PROFILE] Perfil não encontrado para o token');
+      return null;
+    }
+    console.error('[PROFILE] Erro ao buscar perfil por token:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function regenerateShareToken(userId: string): Promise<Profile> {
+  console.log('[PROFILE] Regenerando share token para userId:', userId);
+
+  // Generate new UUID for share token
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      share_token: crypto.randomUUID(),
+      share_token_created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[PROFILE] Erro ao regenerar share token:', error);
+    throw error;
+  }
+
+  console.log('[PROFILE] Share token regenerado');
+  return data;
+}
+
+export async function ensureShareToken(userId: string): Promise<string> {
+  console.log('[PROFILE] Verificando share token para userId:', userId);
+
+  // First, try to get the existing profile
+  const profile = await getProfile(userId);
+
+  // If profile exists and has a share_token, return it
+  if (profile?.share_token) {
+    console.log('[PROFILE] Share token já existe');
+    return profile.share_token;
+  }
+
+  // If no share_token, generate one
+  console.log('[PROFILE] Gerando novo share token');
+  const newToken = crypto.randomUUID();
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({
+      id: userId,
+      share_token: newToken,
+      share_token_created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[PROFILE] Erro ao criar share token:', error);
+    throw error;
+  }
+
+  console.log('[PROFILE] Share token criado:', data.share_token);
+  return data.share_token;
 }

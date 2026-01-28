@@ -1,13 +1,16 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-if(!SUPABASE_URL || !SUPABASE_ANON_KEY){
-  throw new Error('Missing Supabase Enviroment Variables');
-}
-
+// Create client - will be functional when env vars are available at runtime
+// During build/prerender, env vars may not be available, so we create a placeholder
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Helper to check if Supabase is properly configured (for runtime checks)
+export function isSupabaseConfigured(): boolean {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
 
 // Tipos de autenticação
 export type AuthSession = {

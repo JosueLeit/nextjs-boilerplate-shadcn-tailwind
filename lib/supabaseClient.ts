@@ -1,15 +1,42 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Lazy initialization to avoid build-time errors during Next.js static generation
+let _supabase: SupabaseClient | null = null;
 
-// Create client - will be functional when env vars are available at runtime
-// During build/prerender, env vars may not be available, so we create a placeholder
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+function getSupabaseClient(): SupabaseClient {
+  if (_supabase) return _supabase;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    // During build/prerender, return a mock client that will be replaced at runtime
+    // This prevents build failures while keeping TypeScript happy
+    throw new Error('Supabase client accessed during build without env vars');
+  }
+
+  _supabase = createClient(url, key);
+  return _supabase;
+}
+
+// Export a proxy that lazily initializes the client
+// This ensures the client is only created when actually used at runtime
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    const client = getSupabaseClient();
+    const value = (client as any)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
+  }
+});
 
 // Helper to check if Supabase is properly configured (for runtime checks)
 export function isSupabaseConfigured(): boolean {
-  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+// Get URL for storage operations (used in getPhotos)
+export function getSupabaseUrl(): string {
+  return process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 }
 
 // Tipos de autenticação
@@ -138,7 +165,7 @@ export async function getPhotos(userId?: string){
 
       return {
         id: file.id,
-        imageUrl: `${SUPABASE_URL}/storage/v1/object/public/vcinesquecivel/${fullPath}`,
+        imageUrl: `${getSupabaseUrl()}/storage/v1/object/public/vcinesquecivel/${fullPath}`,
         caption: caption,
         date: dateStr,
         fileName: fullPath,

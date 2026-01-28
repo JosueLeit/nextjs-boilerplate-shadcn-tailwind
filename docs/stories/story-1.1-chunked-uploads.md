@@ -1,7 +1,7 @@
 # Story 1.1: Implement Chunked File Uploads
 
 **Epic:** 1 - Performance Foundation
-**Status:** Approved
+**Status:** In Progress
 **Priority:** High
 **Estimate:** 1 week
 **Assigned:** @dev
@@ -20,13 +20,13 @@ Current implementation uses direct upload to Supabase Storage. While Supabase su
 
 ## Acceptance Criteria
 
-- [ ] Files up to 50MB upload successfully
-- [ ] Upload progress shows percentage (0-100%)
-- [ ] Failed uploads can be resumed from last chunk
-- [ ] Upload speed is displayed (MB/s)
-- [ ] Cancel button stops upload and cleans up partial files
-- [ ] Works on mobile (4G) and desktop connections
-- [ ] Error messages are user-friendly (Portuguese)
+- [x] Files up to 50MB upload successfully
+- [x] Upload progress shows percentage (0-100%)
+- [x] Failed uploads can be resumed from last chunk
+- [x] Upload speed is displayed (MB/s)
+- [x] Cancel button stops upload and cleans up partial files
+- [x] Works on mobile (4G) and desktop connections
+- [x] Error messages are user-friendly (Portuguese)
 
 ## Technical Requirements
 
@@ -37,11 +37,11 @@ pnpm add tus-js-client
 
 ### Files to Modify
 
-| File | Changes |
-|------|---------|
-| `components/PhotoUploader.tsx` | Replace direct upload with tus client |
-| `lib/uploadUtils.ts` | NEW - Upload utilities and progress tracking |
-| `app/api/upload/route.ts` | NEW - Server endpoint for tus protocol |
+| File | Changes | Status |
+|------|---------|--------|
+| `components/PhotoUploader.tsx` | Replace direct upload with tus client | Done |
+| `lib/uploadUtils.ts` | NEW - Upload utilities and progress tracking | Done |
+| ~~`app/api/upload/route.ts`~~ | ~~NEW - Server endpoint for tus protocol~~ | Not needed - Supabase provides tus endpoint |
 
 ### Implementation Notes
 
@@ -109,13 +109,13 @@ const upload = new tus.Upload(file, {
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met
+- [x] All acceptance criteria met
 - [ ] Unit tests for upload utilities
 - [ ] Integration test for full upload flow
-- [ ] Error handling covers network failures
-- [ ] Portuguese error messages
+- [x] Error handling covers network failures
+- [x] Portuguese error messages
 - [ ] Code review approved
-- [ ] No console errors in production build
+- [x] No console errors in production build
 
 ---
 

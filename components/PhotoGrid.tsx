@@ -1,125 +1,65 @@
-import React from 'react';
-import { Photo } from '@/types';
-import Polaroid from './Polaroid';
+'use client'
+
+import React from 'react'
+import { Photo } from '@/types'
+import GalleryGrid from './GalleryGrid'
+import LayoutSwitcher, { LayoutSwitcherCompact } from './LayoutSwitcher'
 
 interface PhotoGridProps {
-  photos: Photo[];
-  onDeletePhoto: (id: string) => void;
+  photos: Photo[]
+  onDeletePhoto: (id: string) => void
 }
 
 export default function PhotoGrid({ photos, onDeletePhoto }: PhotoGridProps) {
-  // Organizar fotos por ano e mês
-  const organizedPhotos = photos.reduce((acc, photo) => {
-    try {
-      // Garantir que a data é válida
-      let date = new Date(photo.date);
-      
-      // Verificar se é uma data válida
-      if (isNaN(date.getTime())) {
-        // Tentar parse em outro formato
-        if (photo.date.includes('/')) {
-          const parts = photo.date.split('/');
-          if (parts.length === 3) {
-            // Formato DD/MM/YYYY
-            date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-          }
-        }
-        
-        // Se ainda for inválida, usar a data atual como fallback
-        if (isNaN(date.getTime())) {
-          console.error(`Data inválida para foto: ${photo.id}, data: ${photo.date}`);
-          date = new Date(); // Fallback para data atual
-        }
-      }
-      
-      const year = date.getFullYear();
-      const month = date.getMonth();
-      
-      if (!acc[year]) {
-        acc[year] = {};
-      }
-      
-      if (!acc[year][month]) {
-        acc[year][month] = [];
-      }
-      
-      acc[year][month].push(photo);
-    } catch (error) {
-      console.error(`Erro ao processar foto: ${photo.id}`, error);
-      // Se houver erro, colocar em um grupo especial
-      if (!acc[9999]) {
-        acc[9999] = {};
-      }
-      if (!acc[9999][0]) {
-        acc[9999][0] = [];
-      }
-      acc[9999][0].push(photo);
-    }
-    
-    return acc;
-  }, {} as Record<number, Record<number, Photo[]>>);
-  
-  // Meses em português
-  const monthNames = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
-
-  // Ordenar os anos em ordem decrescente (mais recente primeiro)
-  const sortedYears = Object.keys(organizedPhotos)
-    .map(Number)
-    .filter(year => year !== 9999) // Remover o ano especial de erro
-    .sort((a, b) => b - a);
-
-  // Verificar se temos fotos com problemas de data
-  const hasProblematicPhotos = organizedPhotos[9999] && organizedPhotos[9999][0]?.length > 0;
+  if (photos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="w-24 h-24 mb-6 text-gray-300">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+        <h3 className="text-xl font-semibold text-gray-700 mb-2">
+          Nenhuma foto ainda
+        </h3>
+        <p className="text-gray-500 max-w-md">
+          Comece a construir sua galeria adicionando suas primeiras fotos.
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-12">
-      {sortedYears.map(year => (
-        <div key={year} className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 pb-2 border-b">{year}</h2>
-          
-          {Object.keys(organizedPhotos[year])
-            .map(Number)
-            .sort((a, b) => b - a) // Ordenar meses em ordem decrescente
-            .map(month => (
-              <div key={`${year}-${month}`} className="mb-8">
-                <h3 className="text-xl font-semibold text-gray-700 mb-4">{monthNames[month]}</h3>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                  {organizedPhotos[year][month].map(photo => (
-                    <Polaroid 
-                      key={photo.id} 
-                      photo={photo} 
-                      onDelete={() => onDeletePhoto(photo.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
+    <div className="space-y-4">
+      {/* Header with layout switcher */}
+      <div className="flex items-center justify-between px-2">
+        <p className="text-sm text-gray-500">
+          {photos.length} {photos.length === 1 ? 'foto' : 'fotos'}
+        </p>
+
+        {/* Desktop layout switcher */}
+        <div className="hidden sm:block">
+          <LayoutSwitcher />
         </div>
-      ))}
-      
-      {/* Exibir fotos com problemas de data, se houver */}
-      {hasProblematicPhotos && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 pb-2 border-b text-amber-600">
-            Outras Fotos
-            <span className="ml-2 text-sm font-normal text-amber-500">(datas não reconhecidas)</span>
-          </h2>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {organizedPhotos[9999][0].map(photo => (
-              <Polaroid 
-                key={photo.id} 
-                photo={photo} 
-                onDelete={() => onDeletePhoto(photo.id)}
-              />
-            ))}
-          </div>
+
+        {/* Mobile layout switcher */}
+        <div className="sm:hidden">
+          <LayoutSwitcherCompact />
         </div>
-      )}
+      </div>
+
+      {/* Gallery */}
+      <GalleryGrid photos={photos} onDeletePhoto={onDeletePhoto} />
     </div>
-  );
-} 
+  )
+}

@@ -1,0 +1,137 @@
+'use client'
+
+import React, { useState } from 'react'
+import { motion } from 'framer-motion'
+import { LayoutProps } from './types'
+import { OptimizedImage } from '../OptimizedImage'
+import { Trash2, Loader2, Maximize } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog'
+import { supabase } from '@/lib/supabaseClient'
+
+interface PhotoCardProps {
+  photo: LayoutProps['photos'][0]
+  onDelete: () => void
+}
+
+function PhotoCard({ photo, onDelete }: PhotoCardProps) {
+  const [isHovered, setIsHovered] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true)
+      const { error } = await supabase.storage
+        .from('vcinesquecivel')
+        .remove([photo.fileName])
+      if (error) throw error
+      onDelete()
+    } catch (error) {
+      console.error('Erro ao deletar foto:', error)
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+    }
+  }
+
+  return (
+    <>
+      <motion.div
+        className="relative mb-2 break-inside-avoid rounded-lg overflow-hidden group"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <OptimizedImage
+          src={photo.imageUrl}
+          alt={photo.caption}
+          blurhash={photo.blurhash}
+          variants={photo.variants}
+          variant="medium"
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          className="w-full h-auto"
+        />
+
+        {/* Overlay on hover */}
+        <div
+          className={`absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent transition-opacity duration-200 ${
+            isHovered ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <div className="absolute bottom-0 left-0 right-0 p-3">
+            <p className="text-white text-sm font-medium truncate">{photo.caption}</p>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div
+          className={`absolute top-2 right-2 flex gap-2 transition-opacity duration-200 ${
+            isHovered ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <button
+            onClick={() => setDeleteDialogOpen(true)}
+            className="bg-red-500/80 hover:bg-red-500 p-2 rounded-full text-white transition-colors"
+            title="Excluir foto"
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+      </motion.div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir esta foto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acao nao pode ser desfeita. A foto sera permanentemente removida.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600">
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                'Excluir'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+export default function MosaicLayout({ photos, onDeletePhoto }: LayoutProps) {
+  return (
+    <div className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-2 p-2">
+      {photos.map((photo) => (
+        <PhotoCard
+          key={photo.id}
+          photo={photo}
+          onDelete={() => onDeletePhoto(photo.id)}
+        />
+      ))}
+    </div>
+  )
+}

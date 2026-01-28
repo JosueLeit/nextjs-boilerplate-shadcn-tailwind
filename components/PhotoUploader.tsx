@@ -7,12 +7,26 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Alert, AlertDescription } from './ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  compressImage,
+  formatFileSize,
+  needsCompression,
+  isHeicFile,
+  CompressionResult
+} from '@/lib/compressionUtils';
+import { useUploadSettingsStore } from '@/lib/store/settingsStore';
 
 interface FormData {
   image: File | null
   imagePreview: string | null
   caption: string
   date: string
+}
+
+interface CompressionState {
+  isCompressing: boolean
+  result: CompressionResult | null
+  skipCompression: boolean
 }
 
 const initialFormData: FormData = {
@@ -22,9 +36,15 @@ const initialFormData: FormData = {
   date: ''
 }
 
+const initialCompressionState: CompressionState = {
+  isCompressing: false,
+  result: null,
+  skipCompression: false
+}
+
 const steps = ['Upload Image', 'Add details', 'Confirm']
 
-export default function PhotoUploadForm({onComplete, existingStartDate}: { 
+export default function PhotoUploadForm({onComplete, existingStartDate}: {
   onComplete: (startDate: string) => void,
   existingStartDate?: string
 }){
@@ -35,7 +55,11 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [isFirstPhoto, setIsFirstPhoto] = useState(false);
+  const [compression, setCompression] = useState<CompressionState>(initialCompressionState);
   const { user } = useAuth();
+
+  // Get settings from store
+  const { autoCompress, compressionQuality, maxDimension } = useUploadSettingsStore();
 
   useEffect(() => {
     // Verificar se já existem fotos no storage
@@ -50,13 +74,13 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
           .storage
           .from('vcinesquecivel')
           .list(user.id);
-          
+
         if (error) throw error;
-        
+
         // Filtrar apenas arquivos de imagem
         const photos = data?.filter(file => file.name.match(/\.(jpg|jpeg|png|gif)$/i));
         setIsFirstPhoto(photos?.length === 0);
-        
+
         // Se já existe uma data de início, usá-la
         if (existingStartDate) {
           setStartDate(existingStartDate);
@@ -67,11 +91,11 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
         setIsFirstPhoto(false);
       }
     };
-    
+
     checkPhotosExistence();
   }, [existingStartDate, user]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if(e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       // Revoke previous preview URL to avoid memory leaks
@@ -81,12 +105,19 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
       const previewUrl = URL.createObjectURL(file);
       setFormData({...formData, image: file, imagePreview: previewUrl});
       setImageError(null);
+
+      // Reset compression state when new file is selected
+      setCompression(initialCompressionState);
     }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) =>{
     const {name, value} = e.target
     setFormData({...formData, [name]: value});
+  }
+
+  const handleSkipCompressionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCompression(prev => ({ ...prev, skipCompression: e.target.checked, result: null }));
   }
 
   const handleUpload = async () => {
@@ -99,16 +130,56 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
     setError(null);
 
     try {
+      let fileToUpload = formData.image;
+
+      // Compress image if auto-compress is enabled and user hasn't opted to skip
+      if (autoCompress && !compression.skipCompression) {
+        const shouldCompress = needsCompression(fileToUpload) || isHeicFile(fileToUpload);
+
+        if (shouldCompress) {
+          setCompression(prev => ({ ...prev, isCompressing: true }));
+
+          console.log('[UPLOAD] Iniciando compressao:', {
+            originalSize: formatFileSize(fileToUpload.size),
+            fileName: fileToUpload.name
+          });
+
+          const compressionResult = await compressImage(fileToUpload, {
+            initialQuality: compressionQuality,
+            maxWidthOrHeight: maxDimension
+          });
+
+          setCompression(prev => ({
+            ...prev,
+            isCompressing: false,
+            result: compressionResult
+          }));
+
+          if (compressionResult.wasCompressed) {
+            fileToUpload = compressionResult.file;
+            console.log('[UPLOAD] Compressao concluida:', {
+              originalSize: formatFileSize(compressionResult.originalSize),
+              compressedSize: formatFileSize(compressionResult.compressedSize),
+              reduction: `${Math.round((1 - compressionResult.compressedSize / compressionResult.originalSize) * 100)}%`
+            });
+          }
+        }
+      }
+
       console.log('[UPLOAD] Iniciando upload:', {
         caption: formData.caption,
         date: formData.date,
-        userId: user.id
+        userId: user.id,
+        fileSize: formatFileSize(fileToUpload.size)
       });
+
+      // Get the file extension from the file to upload (may have changed after compression)
+      const fileExtension = fileToUpload.name.split('.').pop() || 'jpg';
 
       await supabase.storage
         .from('vcinesquecivel')
-        .upload(`${user.id}/${formData.date}-${formData.caption}.${formData.image.name.split('.').pop()}`, formData.image);
-      
+        .upload(`${user.id}/${formData.date}-${formData.caption}.${fileExtension}`, fileToUpload);
+
       // Se é a primeira foto e não tem data de início, vá para o passo de confirmar
       // Caso contrário, finalize o upload
       if (isFirstPhoto && !existingStartDate) {
@@ -122,6 +193,7 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
       setError(error.message || 'Erro ao fazer upload da imagem. Tente novamente.');
     } finally {
       setIsUploading(false);
+      setCompression(prev => ({ ...prev, isCompressing: false }));
     }
   }
 
@@ -147,6 +219,10 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
     exit: { opacity:0, scale:0.8 }
   }
 
+  // Check if current file needs compression (for UI display)
+  const fileNeedsCompression = formData.image &&
+    (needsCompression(formData.image) || isHeicFile(formData.image));
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 backdrop-blur-sm">
       <AnimatePresence mode="wait">
@@ -160,7 +236,7 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
         >
           <div className="flex justify-between items-center mb-6 pb-3 border-b">
             <h2 className="text-2xl font-bold text-pink-600">{steps[currentStep]}</h2>
-            <Button 
+            <Button
               variant="ghost"
               size="icon"
               onClick={handleClose}
@@ -215,6 +291,12 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600 mb-1">Arquivo selecionado:</p>
                   <p className="text-sm font-medium truncate">{formData.image.name}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Tamanho: {formatFileSize(formData.image.size)}
+                    {fileNeedsCompression && autoCompress && !compression.skipCompression && (
+                      <span className="text-blue-600 ml-2">(sera otimizado)</span>
+                    )}
+                  </p>
                 </div>
               )}
 
@@ -222,7 +304,7 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
                 onClick={handleNextStep}
                 className="w-full"
               >
-                Próximo
+                Proximo
               </Button>
             </div>
           )}
@@ -235,13 +317,43 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
+
+              {/* Compression Status */}
+              {compression.isCompressing && (
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                    <span className="text-blue-800 font-medium">Otimizando imagem...</span>
+                  </div>
+                  {formData.image && (
+                    <p className="text-sm text-blue-600 mt-2">
+                      {formData.image.name}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Compression Result */}
+              {compression.result && compression.result.wasCompressed && (
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm text-green-800 font-medium">Imagem otimizada!</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    Original: {formatFileSize(compression.result.originalSize)} →
+                    Otimizado: {formatFileSize(compression.result.compressedSize)}
+                    <span className="ml-2 text-green-700 font-medium">
+                      ({Math.round((1 - compression.result.compressedSize / compression.result.originalSize) * 100)}% menor)
+                    </span>
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="caption" className="block mb-1">Legenda</Label>
-                <Input 
-                  id="caption" 
-                  name="caption" 
-                  onChange={handleInputChange} 
-                  value={formData.caption} 
+                <Input
+                  id="caption"
+                  name="caption"
+                  onChange={handleInputChange}
+                  value={formData.caption}
                   placeholder="Descreva esse momento especial"
                   className="w-full"
                 />
@@ -251,11 +363,11 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
               </div>
               <div>
                 <Label htmlFor="date" className="block mb-1">Data</Label>
-                <Input 
-                  id="date" 
-                  name="date" 
-                  type="date" 
-                  onChange={handleInputChange} 
+                <Input
+                  id="date"
+                  name="date"
+                  type="date"
+                  onChange={handleInputChange}
                   value={formData.date}
                   className="w-full"
                 />
@@ -263,14 +375,41 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
                   <p className="text-xs text-red-500 mt-1">Por favor, selecione a data</p>
                 )}
               </div>
+
+              {/* Skip Compression Option */}
+              {fileNeedsCompression && autoCompress && (
+                <div className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="skipCompression"
+                    checked={compression.skipCompression}
+                    onChange={handleSkipCompressionChange}
+                    className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                  />
+                  <Label htmlFor="skipCompression" className="text-sm text-gray-700 cursor-pointer">
+                    Enviar original (usa mais armazenamento)
+                  </Label>
+                </div>
+              )}
+
               <div className="flex justify-between pt-2">
                 <Button variant="outline" onClick={()=> setCurrentStep(0)}>Voltar</Button>
-                <Button 
-                  onClick={handleUpload} 
-                  disabled={isUploading || !formData.caption || !formData.date}
+                <Button
+                  onClick={handleUpload}
+                  disabled={isUploading || compression.isCompressing || !formData.caption || !formData.date}
                   className="bg-pink-600 hover:bg-pink-700"
                 >
-                  {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> :'Enviar'} 
+                  {compression.isCompressing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Otimizando...
+                    </>
+                  ) : isUploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : 'Enviar'}
                 </Button>
               </div>
             </div>
@@ -285,23 +424,23 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
                 <p className="text-green-800 font-medium">Foto enviada com sucesso!</p>
                 <p className="text-sm text-green-600 mt-1">Agora vamos finalizar configurando sua linha do tempo</p>
               </div>
-              
+
               <div>
-                <Label htmlFor="startDate" className="block mb-2 font-medium">Quando começou sua história?</Label>
-                <p className="text-sm text-gray-500 mb-3">Esta data será usada para calcular há quanto tempo vocês estão juntos</p>
-                <Input 
-                  id="startDate" 
-                  type="date" 
-                  value={startDate} 
-                  onChange={(e) => setStartDate(e.target.value)} 
+                <Label htmlFor="startDate" className="block mb-2 font-medium">Quando comecou sua historia?</Label>
+                <p className="text-sm text-gray-500 mb-3">Esta data sera usada para calcular ha quanto tempo voces estao juntos</p>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
                   className="w-full"
                 />
                 {!startDate && (
-                  <p className="text-xs text-red-500 mt-1">Por favor, selecione a data de início</p>
+                  <p className="text-xs text-red-500 mt-1">Por favor, selecione a data de inicio</p>
                 )}
               </div>
-              <Button 
-                onClick={handleSubmit} 
+              <Button
+                onClick={handleSubmit}
                 disabled={!startDate}
                 className="w-full bg-pink-600 hover:bg-pink-700"
               >

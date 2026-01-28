@@ -20,13 +20,13 @@ Modern smartphones capture photos at 12-50MP, resulting in 5-15MB files. Most us
 
 ## Acceptance Criteria
 
-- [ ] Photos >10MB are automatically compressed before upload
-- [ ] Compression maintains 80% quality (configurable)
+- [x] Photos >10MB are automatically compressed before upload
+- [x] Compression maintains 80% quality (configurable)
 - [ ] Original photo is available for download if user is on Premium plan
-- [ ] User can toggle "Upload original" option
-- [ ] Compression happens in background (non-blocking UI)
-- [ ] EXIF data is preserved (orientation, date, location)
-- [ ] HEIC files are converted to JPEG
+- [x] User can toggle "Upload original" option
+- [x] Compression happens in background (non-blocking UI)
+- [x] EXIF data is preserved (orientation, date, location)
+- [x] HEIC files are converted to JPEG
 
 ## Technical Requirements
 
@@ -37,11 +37,11 @@ pnpm add browser-image-compression
 
 ### Files to Modify
 
-| File | Changes |
-|------|---------|
-| `components/PhotoUploader.tsx` | Add compression step before upload |
-| `lib/imageCompression.ts` | NEW - Compression utilities |
-| `lib/store/settingsStore.ts` | NEW - User preferences for upload quality |
+| File | Changes | Status |
+|------|---------|--------|
+| `components/PhotoUploader.tsx` | Add compression step before upload | DONE |
+| `lib/compressionUtils.ts` | NEW - Compression utilities | DONE |
+| `lib/store/settingsStore.ts` | NEW - User preferences for upload quality | DONE |
 
 ### Implementation Notes
 

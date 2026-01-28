@@ -21,14 +21,14 @@ The `process-image` edge function currently returns a stub response. This story 
 
 ## Acceptance Criteria
 
-- [ ] Thumbnail variant (200x200) generated in WebP format
-- [ ] Medium variant (800px width) generated in WebP format
-- [ ] Large variant (1600px width) generated in WebP format
-- [ ] BlurHash generated and stored in database
-- [ ] Variants uploaded to storage with correct paths
-- [ ] Database updated with variants paths and blurhash
-- [ ] Processing completes in <10 seconds for typical photos
-- [ ] Original image preserved unchanged
+- [x] Thumbnail variant (200x200) generated in WebP format
+- [x] Medium variant (800px width) generated in WebP format
+- [x] Large variant (1600px width) generated in WebP format
+- [x] BlurHash generated and stored in database
+- [x] Variants uploaded to storage with correct paths
+- [x] Database updated with variants paths and blurhash
+- [ ] Processing completes in <10 seconds for typical photos (requires testing)
+- [x] Original image preserved unchanged
 
 ## Technical Requirements
 
@@ -125,10 +125,10 @@ vcinesquecivel/
 
 ## Definition of Done
 
-- [ ] All 3 variants generated on upload
-- [ ] BlurHash generated and stored
-- [ ] Database updated correctly
-- [ ] Processing time <10s for 5MB image
+- [x] All 3 variants generated on upload
+- [x] BlurHash generated and stored
+- [x] Database updated correctly
+- [ ] Processing time <10s for 5MB image (requires testing)
 - [ ] Unit tests for processing logic
 - [ ] Code review approved
 
@@ -136,6 +136,19 @@ vcinesquecivel/
 
 ## Notes
 
-- sharp may not work directly in Deno - evaluate alternatives
+- ~~sharp may not work directly in Deno~~ - Using `imagemagick_deno` (WASM-based)
 - Consider async queue for large batches
 - Monitor Supabase function execution time limits (default 60s)
+
+## Implementation Notes (2026-01-28)
+
+**Libraries used:**
+- `imagemagick_deno@0.0.31` - WASM-based ImageMagick for Deno
+- `blurhash@2.0.5` - BlurHash encoding
+
+**Variant naming convention:**
+- `{basePath}_thumb.webp` - 200x200 cover crop
+- `{basePath}_medium.webp` - 800px width
+- `{basePath}_large.webp` - 1600px width
+
+**Edge function deployed:** Version 2

@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog"
 import { Photo } from '@/types'
+import { OptimizedImage } from './OptimizedImage'
 
 interface PolaroidProps {
   photo: Photo
@@ -25,7 +26,6 @@ export default function Polaroid({ photo, onDelete }: PolaroidProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
   let formattedDate;
@@ -75,10 +75,6 @@ export default function Polaroid({ photo, onDelete }: PolaroidProps) {
     }
   };
 
-  const handleImageLoad = () => {
-    setImageLoaded(true);
-  };
-
   const toggleFullscreen = () => {
     setFullscreen(!fullscreen);
   };
@@ -95,17 +91,15 @@ export default function Polaroid({ photo, onDelete }: PolaroidProps) {
       >
         <div className={`${fullscreen ? 'max-w-5xl w-full h-full max-h-screen flex flex-col items-center justify-center' : 'relative overflow-hidden'}`}>
           <div className={`${fullscreen ? 'w-full h-full flex items-center justify-center' : 'relative overflow-hidden pb-[100%]'}`}>
-            {!imageLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
-              </div>
-            )}
-            <img 
-              src={photo.imageUrl} 
-              alt={photo.caption} 
-              className={`${fullscreen ? 'max-h-[90vh] max-w-full object-contain' : 'absolute inset-0 w-full h-full object-cover'} transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-              loading="lazy"
-              onLoad={handleImageLoad}
+            <OptimizedImage
+              src={photo.imageUrl}
+              alt={photo.caption}
+              blurhash={photo.blurhash}
+              variants={photo.variants}
+              variant={fullscreen ? 'large' : 'medium'}
+              sizes={fullscreen ? '100vw' : '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 400px'}
+              className={fullscreen ? 'max-h-[90vh] max-w-full object-contain' : 'absolute inset-0 w-full h-full object-cover'}
+              containerClassName={fullscreen ? 'w-auto h-auto' : 'absolute inset-0'}
             />
           </div>
           

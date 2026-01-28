@@ -22,6 +22,11 @@ import {
   calculateETA
 } from '@/lib/uploadUtils';
 import { useUploadSettingsStore } from '@/lib/store/settingsStore';
+import {
+  processImageAfterUpload,
+  ProcessingState,
+  initialProcessingState
+} from '@/lib/imageProcessingService';
 
 interface FormData {
   image: File | null
@@ -84,6 +89,7 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
   const [isFirstPhoto, setIsFirstPhoto] = useState(false);
   const [compression, setCompression] = useState<CompressionState>(initialCompressionState);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>(initialUploadProgress);
+  const [processing, setProcessing] = useState<ProcessingState>(initialProcessingState);
   const uploadControllerRef = useRef<UploadController | null>(null);
   const { user } = useAuth();
 
@@ -144,9 +150,10 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
       setFormData({...formData, image: file, imagePreview: previewUrl});
       setImageError(null);
 
-      // Reset compression and upload state when new file is selected
+      // Reset compression, upload, and processing state when new file is selected
       setCompression(initialCompressionState);
       setUploadProgress(initialUploadProgress);
+      setProcessing(initialProcessingState);
     }
   };
 
@@ -180,6 +187,7 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
     }
     setIsUploading(false);
     setUploadProgress(initialUploadProgress);
+    setProcessing(initialProcessingState);
     setError(null);
   };
 
@@ -267,11 +275,37 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
             bytesTotal
           }));
         },
-        onSuccess: () => {
+        onSuccess: async () => {
           console.log('[UPLOAD] Upload concluido com sucesso');
           uploadControllerRef.current = null;
-          setIsUploading(false);
           setUploadProgress(prev => ({ ...prev, percentage: 100 }));
+
+          // Start image processing
+          setProcessing({ status: 'processing', message: 'Processando imagem...', photoId: null });
+
+          // Construct the storage path
+          const storagePath = `${user.id}/${fileName}`;
+
+          // Process image after upload (creates DB record + triggers edge function)
+          const result = await processImageAfterUpload({
+            storagePath,
+            userId: user.id,
+            caption: formData.caption,
+            takenAt: formData.date,
+            originalFilename: formData.image?.name,
+            fileSizeBytes: fileToUpload.size,
+          });
+
+          if (result.error) {
+            console.warn('[UPLOAD] Processing failed but upload succeeded:', result.error);
+            setProcessing({ status: 'error', message: result.error, photoId: null });
+            // Continue anyway - photo exists in storage
+          } else {
+            console.log('[UPLOAD] Processing started for photo:', result.photoId);
+            setProcessing({ status: 'success', message: 'Foto salva!', photoId: result.photoId });
+          }
+
+          setIsUploading(false);
 
           // Se e a primeira foto e nao tem data de inicio, va para o passo de confirmar
           // Caso contrario, finalize o upload
@@ -537,6 +571,31 @@ export default function PhotoUploadForm({onComplete, existingStartDate}: {
                       Cancelar
                     </Button>
                   </div>
+                </div>
+              )}
+
+              {/* Processing State */}
+              {processing.status === 'processing' && (
+                <div className="p-4 bg-purple-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
+                    <span className="text-purple-800 font-medium">{processing.message}</span>
+                  </div>
+                  <p className="text-sm text-purple-600 mt-2">
+                    Gerando miniaturas e otimizando...
+                  </p>
+                </div>
+              )}
+
+              {processing.status === 'error' && (
+                <div className="p-4 bg-yellow-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <AlertCircle className="h-5 w-5 text-yellow-600" />
+                    <span className="text-yellow-800 font-medium">Aviso</span>
+                  </div>
+                  <p className="text-sm text-yellow-700 mt-2">
+                    {processing.message || 'Foto salva, mas otimizacao falhou.'}
+                  </p>
                 </div>
               )}
 

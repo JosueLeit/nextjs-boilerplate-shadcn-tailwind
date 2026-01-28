@@ -21,22 +21,21 @@ The `process-image` edge function has been deployed as a stub (Story 1.3). This 
 
 ## Acceptance Criteria
 
-- [ ] Upload flow calls edge function after successful storage upload
-- [ ] Edge function receives correct payload (photoId, bucket, path)
-- [ ] Function response is handled properly (success/error states)
-- [ ] Loading state shown while processing
-- [ ] Error handling with user-friendly messages
+- [x] Upload flow calls edge function after successful storage upload
+- [x] Edge function receives correct payload (photoId, bucket, path)
+- [x] Function response is handled properly (success/error states)
+- [x] Loading state shown while processing
+- [x] Error handling with user-friendly messages
 - [ ] Function logs visible in Supabase dashboard
 
 ## Technical Requirements
 
-### Files to Modify
+### Files Modified
 
 | File | Changes |
 |------|---------|
-| `lib/uploadService.ts` | Add edge function call after upload |
-| `hooks/usePhotoUpload.ts` | Handle processing state |
-| `components/UploadProgress.tsx` | Show "Processing..." state |
+| `lib/imageProcessingService.ts` | **NEW** - Edge function call service |
+| `components/PhotoUploader.tsx` | Added processing state and edge function integration |
 
 ### Edge Function Endpoint
 
@@ -106,10 +105,10 @@ A test record exists for manual testing:
 
 ## Definition of Done
 
-- [ ] Edge function called on every photo upload
-- [ ] Processing state shown in UI
-- [ ] Error handling implemented
-- [ ] Logs confirm function execution
+- [x] Edge function called on every photo upload
+- [x] Processing state shown in UI
+- [x] Error handling implemented
+- [ ] Logs confirm function execution (requires manual test)
 - [ ] Code review approved
 
 ---
